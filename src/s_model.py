@@ -7,7 +7,7 @@
 # Created on Mon Oct 28
 
 # Tasks/questions:
-# Over how long (in depth terms) do we think Laki is releasing SO2? I have set it up as a "point" emission in time; is that reasonable?
+# Scenarios: All volcanic oxidation TMI vs. all H2O2/OH vs. half:half
 
 #%% Preamble 
 
@@ -27,6 +27,37 @@ def get_alpha_with_temp(temp,alpha): # Provide temperature and temperature depen
     unc = ( alpha[1]**2 + unc_pt2**2 )**0.5
     return(value,unc)
 
+# Add low/hi uncertainty to this and later use it in the bcg and other sections!
+def rayleigh_product(e,d_0,f,r_std):
+    a = e/1000+1
+    r_0 = (d_0/1000 + 1)*r_std
+    r_P = (1-f**a)/(1-f)*r_0
+    d_P = (r_P/r_std - 1)*1000
+    return(d_P)
+
+def rayleigh_rem_substrate(e,d_0,f,r_std):
+    a = e/1000+1
+    r_0 = (d_0/1000 + 1)*r_std
+    r_S = (f**(a-1))*r_0
+    d_S = (r_S/r_std - 1)*1000
+    return(d_S)
+
+def rayleigh_product_33S(e,theta,d_0_34,d_0_33,f,r_std_33,r_std_34):
+    #e_abs = np.abs(e)
+    #a_34 = e_abs/1000+1
+    a_34 = e/1000+1
+    r_0_34 = (d_0_34/1000 + 1)*r_std_34
+    r_P_34 = (1-f**a_34)/(1-f)*r_0_34
+    d_P_34 = (r_P_34/r_std_34 - 1)*1000
+    #a_33 = np.exp(theta*np.log(e_abs/1000+1))
+    a_33 = np.exp(theta*np.log(e/1000+1))
+    r_0_33 = (d_0_33/1000 + 1)*r_std_33
+    r_P_33 = (1-f**a_33)/(1-f)*r_0_33
+    d_P_33 = (r_P_33/r_std_33 - 1)*1000 
+    D_P_33 = 1000*( (d_P_33/1000+1) - (d_P_34/1000+1)**0.515 )
+    #return(d_P_33*e/e_abs,D_P_33)
+    return(d_P_33,D_P_33)
+
 #%% Input parameters: (mean,sd) with Gaussian distribution unless otherwise specified
 
 # General conditions
@@ -37,9 +68,9 @@ frac_oxidised_bcg_tot = 0.5 # Fraction of background SO2 oxidised: Is this right
 
 # Emitted SO2 isotopic composition
 d34S_bcgSO2 = (-1,1) # Currently just mirroring volc: Do we have a better value here?
-d33S_bcgSO2 = (0,0.01) # Guess
+d33S_bcgSO2 = (((d34S_bcgSO2[0]/1000+1)**0.515 - 1)*1000,0.01) # D33S = 0
 d34S_volcSO2 = (-1,1) # From Will, email
-d33S_volcSO2 = (0,0.01) # Guess
+d33S_volcSO2 = (((d34S_volcSO2[0]/1000+1)**0.515 - 1)*1000,0.01) # D33S = 0; is this right?
 
 # 34S fractionation (T dependent): (a,b,c,d) where alpha-1 = (a+b) - (c+d)*T, where T is in deg C
 # T dependences from Harris et al. 2013
@@ -55,6 +86,15 @@ theta33_OH = (0.503,0.007)
 theta33_H2O2 = (0.511,0.003)
 theta33_TMIcold = (0.498,0.003)
 theta33_TMIwarm = (0.537,0.004)
+
+# Details of the eruption
+full_volc_length = 1.2 # Years over which the volcanic influence is evident in the ice core; length of simulation
+decay_rate = 0.001 # Decay rate for volcanic SO2: This defines how fast the SO2 is removed (see later section for details)
+so2_emission_length = 1.5*30 # days between start of eruption and emissions decreasing strongly (based roughly on Schmidt et al. www.atmos-chem-phys.net/10/6025/2010/ who state that Laki was most vigourous for 1.5 months)
+so2_emission_tail_length = 1.5*30 # days over which SO2 emissions decline linearly to 0
+total_so2 = 120 # Tg of SO2 emitted, total (will be evenly spread across the period defined above)
+mean_res_time_so2 = 20 # Mean residence time in days (mid of values in Schmidt et al)
+mean_res_time_so4 = 8 # Mean residence time in days (mid of values in Schmidt et al)
 
 # Get the Laki data
 laki_data = pd.read_csv(parentdir+'/data/laki_s_isotope_data.csv', sep=',', header=0)
@@ -87,27 +127,15 @@ for n in np.arange(frac_OH_H2O2.shape[0]):
     # Use RP / R0 = (1-f^alpha)/(1-f) to find RP for each reaction
     # OH pathway
     f = 1 - frac_OH_H2O2["f_OH"].iloc[n]*frac_oxidised_bcg_tot  # Fraction remaining respective to this ox pathway
-    a = alpha34_OH[0]/1000+1
-    r_P_OH = (1-f**a)/(1-f)*r_0
-    d_OH = (r_P_OH/r_34S - 1)*1000
-    a_low = (alpha34_OH[0]-alpha34_OH[1])/1000+1 # low unc limit
-    r_P_OH_low = (1-f**a_low)/(1-f)*r_0
-    d_OH_low = (r_P_OH_low/r_34S - 1)*1000
-    a_high = (alpha34_OH[0]+alpha34_OH[1])/1000+1 # high unc limit
-    r_P_OH_high = (1-f**a_high)/(1-f)*r_0
-    d_OH_high = (r_P_OH_high/r_34S - 1)*1000
+    d_OH = rayleigh_product(e=alpha34_OH[0],d_0=d34S_bcgSO2[0],f=f,r_std=r_34S)
+    d_OH_low = rayleigh_product(e=alpha34_OH[0]-alpha34_OH[1],d_0=d34S_bcgSO2[0],f=f,r_std=r_34S)
+    d_OH_high = rayleigh_product(e=alpha34_OH[0]+alpha34_OH[1],d_0=d34S_bcgSO2[0],f=f,r_std=r_34S)
     d_OH = (d_OH,np.nanmean([abs(d_OH_low-d_OH),abs(d_OH_high-d_OH)])) # mean dOH, uncertainty
     # H2O2 pathway
     f = 1 - frac_OH_H2O2["f_H2O2"].iloc[n]*frac_oxidised_bcg_tot  # Fraction remaining respective to this ox pathway
-    a = alpha34_H2O2[0]/1000+1
-    r_P_H2O2 = (1-f**a)/(1-f)*r_0
-    d_H2O2 = (r_P_H2O2/r_34S - 1)*1000
-    a_low = (alpha34_H2O2[0]-alpha34_H2O2[1])/1000+1
-    r_P_H2O2_low = (1-f**a_low)/(1-f)*r_0
-    d_H2O2_low = (r_P_H2O2_low/r_34S - 1)*1000
-    a_high = (alpha34_H2O2[0]+alpha34_H2O2[1])/1000+1
-    r_P_H2O2_high = (1-f**a_high)/(1-f)*r_0
-    d_H2O2_high = (r_P_H2O2_high/r_34S - 1)*1000
+    d_H2O2 = rayleigh_product(e=alpha34_H2O2[0],d_0=d34S_bcgSO2[0],f=f,r_std=r_34S)
+    d_H2O2_low = rayleigh_product(e=alpha34_H2O2[0]-alpha34_H2O2[1],d_0=d34S_bcgSO2[0],f=f,r_std=r_34S)
+    d_H2O2_high = rayleigh_product(e=alpha34_H2O2[0]+alpha34_H2O2[1],d_0=d34S_bcgSO2[0],f=f,r_std=r_34S)
     d_H2O2 = (d_H2O2,np.nanmean([abs(d_H2O2_low-d_H2O2),abs(d_H2O2_high-d_H2O2)])) # mean dOH, uncertainty
     # Mix the products
     frac_OH_H2O2["d_SO4"].iloc[n] = d_OH[0]*frac_OH_H2O2["f_OH"].iloc[n] + d_H2O2[0]*frac_OH_H2O2["f_H2O2"].iloc[n]
@@ -119,33 +147,123 @@ resid_norm = abs(frac_OH_H2O2["resid"])/frac_OH_H2O2["resid_unc"]
 r = np.where(resid_norm == np.nanmin(resid_norm))[0][0]
 f_OH = np.round(frac_OH_H2O2["f_OH"].iloc[r],2)
 f_H2O2 = np.round(1-f_OH,2)
+d34S_bcg = frac_OH_H2O2["d_SO4"].iloc[r]
+
+# Calc 33S for optimised bcg scenario
+f = 1 - f_OH*frac_oxidised_bcg_tot
+bcg_33S_OH = rayleigh_product_33S(e=alpha34_OH[0],theta=theta33_OH[0],d_0_34=d34S_bcgSO2[0],d_0_33=d33S_bcgSO2[0],f=f,r_std_34=r_34S,r_std_33=r_33S)
+f = 1 - f_H2O2*frac_oxidised_bcg_tot
+bcg_33S_H2O2 = rayleigh_product_33S(e=alpha34_H2O2[0],theta=theta33_H2O2[0],d_0_34=d34S_bcgSO2[0],d_0_33=d33S_bcgSO2[0],f=f,r_std_34=r_34S,r_std_33=r_33S)
+d33S_bcg = bcg_33S_OH[0]*f_OH + bcg_33S_H2O2[0]*f_H2O2
+D33S_bcg = bcg_33S_OH[1]*f_OH + bcg_33S_H2O2[1]*f_H2O2
 
 # Plot data and background
-fig = plt.figure(figsize=(12,6))
-plt.plot(laki_data["depth_m"],laki_data["depth_m"]*0+frac_OH_H2O2["d_SO4"].iloc[r],"r-",label="d34S bcg, modelled")
-plt.plot(laki_data["depth_m"],laki_data["depth_m"]*0+frac_OH_H2O2["d_SO4"].iloc[r]+frac_OH_H2O2["d_SO4_unc"].iloc[r],"r:")
-plt.plot(laki_data["depth_m"],laki_data["depth_m"]*0+frac_OH_H2O2["d_SO4"].iloc[r]-frac_OH_H2O2["d_SO4_unc"].iloc[r],"r:")
-plt.plot(laki_data["depth_m"],laki_data["depth_m"]*0+bcg["d34S_permil"].iloc[0],"b-",label="d34S bcg, measured")
-plt.plot(laki_data["depth_m"],laki_data["depth_m"]*0+bcg["d34S_permil"].iloc[0]+bcg["d34S_unc_permil"].iloc[0],"b:")
-plt.plot(laki_data["depth_m"],laki_data["depth_m"]*0+bcg["d34S_permil"].iloc[0]-bcg["d34S_unc_permil"].iloc[0],"b:")
-plt.errorbar(laki_data.loc[laki_data["bcg"]==1,"depth_m"],laki_data.loc[laki_data["bcg"]==1,"d34S_permil"],laki_data.loc[laki_data["bcg"]==1,"d34S_unc_permil"],marker="o",ls="",label="background")
-plt.errorbar(laki_data.loc[laki_data["bcg"]==0,"depth_m"],laki_data.loc[laki_data["bcg"]==0,"d34S_permil"],laki_data.loc[laki_data["bcg"]==0,"d34S_unc_permil"],marker="o",ls="",label="volc")
-plt.xlabel("depth")
-plt.ylabel("d34S_sulfate")
-plt.legend()
+fig, ax = plt.subplots(2,1,figsize=(12,6))
+# 34S
+ax[0].plot(laki_data["depth_m"],laki_data["depth_m"]*0+d33S_bcg,"r-",label="d34S bcg, modelled")
+ax[0].plot(laki_data["depth_m"],laki_data["depth_m"]*0+d33S_bcg+frac_OH_H2O2["d_SO4_unc"].iloc[r],"r:")
+ax[0].plot(laki_data["depth_m"],laki_data["depth_m"]*0+d33S_bcg-frac_OH_H2O2["d_SO4_unc"].iloc[r],"r:")
+ax[0].plot(laki_data["depth_m"],laki_data["depth_m"]*0+bcg["d34S_permil"].iloc[0],"b-",label="d34S bcg, measured")
+ax[0].plot(laki_data["depth_m"],laki_data["depth_m"]*0+bcg["d34S_permil"].iloc[0]+bcg["d34S_unc_permil"].iloc[0],"b:")
+ax[0].plot(laki_data["depth_m"],laki_data["depth_m"]*0+bcg["d34S_permil"].iloc[0]-bcg["d34S_unc_permil"].iloc[0],"b:")
+ax[0].errorbar(laki_data.loc[laki_data["bcg"]==1,"depth_m"],laki_data.loc[laki_data["bcg"]==1,"d34S_permil"],laki_data.loc[laki_data["bcg"]==1,"d34S_unc_permil"],marker="o",ls="",label="background")
+ax[0].errorbar(laki_data.loc[laki_data["bcg"]==0,"depth_m"],laki_data.loc[laki_data["bcg"]==0,"d34S_permil"],laki_data.loc[laki_data["bcg"]==0,"d34S_unc_permil"],marker="o",ls="",label="volc")
+ax[0].set_xlabel("depth")
+ax[0].set_ylabel("d34S_sulfate")
+ax[0].legend()
+# 33S
+ax[1].plot(laki_data["depth_m"],laki_data["depth_m"]*0+D33S_bcg,"r-",label="D34S bcg, modelled")
+ax[1].plot(laki_data["depth_m"],laki_data["depth_m"]*0+bcg["D33S_permil"].iloc[0],"b-",label="D33S bcg, measured")
+ax[1].plot(laki_data["depth_m"],laki_data["depth_m"]*0+bcg["D33S_permil"].iloc[0]+bcg["D33S_unc_permil"].iloc[0],"b:")
+ax[1].plot(laki_data["depth_m"],laki_data["depth_m"]*0+bcg["D33S_permil"].iloc[0]-bcg["D33S_unc_permil"].iloc[0],"b:")
+ax[1].errorbar(laki_data.loc[laki_data["bcg"]==1,"depth_m"],laki_data.loc[laki_data["bcg"]==1,"D33S_permil"],laki_data.loc[laki_data["bcg"]==1,"D33S_unc_permil"],marker="o",ls="",label="background")
+ax[1].errorbar(laki_data.loc[laki_data["bcg"]==0,"depth_m"],laki_data.loc[laki_data["bcg"]==0,"D33S_permil"],laki_data.loc[laki_data["bcg"]==0,"D33S_unc_permil"],marker="o",ls="",label="volc")
+ax[1].set_xlabel("depth")
+ax[1].set_ylabel("D33S_sulfate")
 fig.tight_layout()
 fig.show() 
-plt.savefig("figs/background.pdf") 
+plt.savefig("figs/background_d34S_D33S.pdf") 
 plt.show()
 
-#%% Set up oxidation pathways during the volcanic period
-timesteps = 10000
-laki_modelled = pd.DataFrame(np.zeros((timesteps,6)))
-laki_modelled.columns = ["t","depth","f_remaining","SO2_volc","SO4_volc","d34S_volc","d34S_tot","d33S_volc","d33S_tot"] 
+#%% Look at oxidation pathways during the volcanic period
+
+timesteps = int(full_volc_length*365) # Daily time steps for the ~1.2 years affected
+laki_modelled = pd.DataFrame(np.zeros((timesteps,15)))
+laki_modelled.columns = ["t","depth","so2_emitted","so2_pool","so2_oxidised","so4_pool","so4_removed","d34S_so2_pool","d34S_so4_pool","d33S_so4_pool","D33S_so4_pool","f_volc","d34S_so4_tot","d33S_so4_tot","D33S_so4_tot"] 
 # T is arbitrary time since eruption, according to timesteps
 # depth is the approximate depth equivalent (mainly used for plotting)
-# f_remaining is the fraction of unoxidised SO2 remaining
-# SO2_volc is the amount of volcanic SO2 remaining
-# SO4_volc is the amount of volcanic SO2 oxidised in that timestep, to allow mixing with background (assuming short lifetime of volcanic SO4 - is this valid?)
-# d34S_volc and d34S_tot are the isotopic compositions of deposited volcanic sulfate and total sulfate (mixed with background)
-# d33S, analogously as above
+# so2 emitted is emissions in Tg per day
+# so2 pool is the so2 pool at the END of the day (eg. after daily addition and removal)
+# so2 oxidised is the amount of so2 removed by oxidation
+# so4 pool and removed are analogous (although so4 removed by deposition)
+# d34S_so2_pool and so4 are the pool isotopic compositions at the END of the day
+# f_volc is the fraction of deposited sulfate from volcanic sources (for mixing to find deposited isotopic composition)
+
+laki_modelled["t"] = np.arange(0,timesteps)
+laki_start_depth = 60.18 # Roughly corresponding to the 1.2 years (if you have better data we could change these estimates I made from your figure)
+laki_end_depth = 59.5
+laki_modelled["depth"] = np.linspace(laki_start_depth,laki_end_depth,timesteps)
+
+# Loop through the days...
+so2_per_day = total_so2/so2_emission_length
+alpha34_volc = alpha34_TMI[0] # First scenario, all volc ox from TMI - Add others later!
+for n,t in enumerate(laki_modelled["t"]):
+    # Get the SO2 pool to work on
+    so2_pool_start = laki_modelled.loc[n-1,"so2_pool"] if n>0 else 0
+    # Emit SO2 if t < SO2_emission_length
+    if t <= so2_emission_length:
+        laki_modelled.loc[n,"so2_emitted"] = so2_per_day 
+    elif t <= so2_emission_length + so2_emission_tail_length:
+        proportion = 1 - (t - so2_emission_length)/so2_emission_tail_length
+        laki_modelled.loc[n,"so2_emitted"] = so2_per_day*proportion
+    so2_pool = so2_pool_start + laki_modelled.loc[n,"so2_emitted"]
+    # Remove SO2 according to lifetime
+    laki_modelled.loc[n,"so2_oxidised"] = so2_pool * (1 - np.exp(-1/mean_res_time_so2) )
+    laki_modelled.loc[n,"so2_pool"] = so2_pool - laki_modelled.loc[n,"so2_oxidised"]
+    # Get the SO4 pool
+    so4_pool_start = laki_modelled.loc[n-1,"so4_pool"] if n>0 else 0
+    so4_pool = so4_pool_start + laki_modelled.loc[n,"so2_oxidised"] # Oxidised SO2 -> SO4
+    laki_modelled.loc[n,"so4_removed"] = so4_pool * (1 - np.exp(-1/mean_res_time_so4) )
+    laki_modelled.loc[n,"so4_pool"] = so4_pool - laki_modelled.loc[n,"so4_removed"]
+    # SO2/SO4 d34S isotopic composition
+    d34S_so2_pool_start = laki_modelled.loc[n-1,"d34S_so2_pool"] if n>0 else 0
+    d34S_so2_pool = (d34S_so2_pool_start*so2_pool_start + d34S_volcSO2[0]*laki_modelled.loc[n,"so2_emitted"])/(so2_pool)
+    f_remaining = 1 - laki_modelled.loc[n,"so2_oxidised"]/so2_pool
+    laki_modelled.loc[n,"d34S_so2_pool"] = rayleigh_rem_substrate(e=alpha34_volc,d_0=d34S_so2_pool,f=f_remaining,r_std=r_34S)
+    laki_modelled.loc[n,"d34S_so4_pool"] = rayleigh_product(e=alpha34_volc,d_0=d34S_so2_pool,f=f_remaining,r_std=r_34S)
+    # D33S
+    d_0_33 = ((d34S_so2_pool/1000+1)**0.515 - 1)*1000
+    tmp = rayleigh_product_33S(e=alpha34_volc,theta=theta33_TMIcold[0],d_0_34=d34S_so2_pool,d_0_33=d_0_33,f=f_remaining,r_std_34=r_34S,r_std_33=r_33S)
+    laki_modelled.loc[n,"d33S_so4_pool"] = tmp[0]
+    laki_modelled.loc[n,"D33S_so4_pool"] = tmp[1]
+
+# Mix volcanic S with background S
+# Based on max 96% contribution of volcanic sulfate to total deposited sulfate 
+# (this is the max in Will's excel, maybe there is a better way to estimate?)
+laki_modelled["f_volc"] = laki_modelled["so4_removed"]/np.nanmax(laki_modelled["so4_removed"])*0.96
+laki_modelled["d34S_so4_tot"] = laki_modelled["d34S_so4_pool"]*laki_modelled["f_volc"] + d34S_bcg*(1-laki_modelled["f_volc"])
+laki_modelled["d33S_so4_tot"] = laki_modelled["d33S_so4_pool"]*laki_modelled["f_volc"] + d33S_bcg*(1-laki_modelled["f_volc"])
+laki_modelled["D33S_so4_tot"] = laki_modelled["D33S_so4_pool"]*laki_modelled["f_volc"] + D33S_bcg*(1-laki_modelled["f_volc"])
+
+# Plot data and background
+fig, ax = plt.subplots(2,1,figsize=(12,6))
+ax[0].plot(-laki_data["depth_m"],laki_data["depth_m"]*0+d34S_bcg,"g:",label="d34S bcg, modelled")
+ax[0].plot(-laki_modelled["depth"],laki_modelled["d34S_so4_tot"],"r-",label="d34S volc, modelled")
+ax[0].errorbar(-laki_data.loc[laki_data["bcg"]==1,"depth_m"],laki_data.loc[laki_data["bcg"]==1,"d34S_permil"],laki_data.loc[laki_data["bcg"]==1,"d34S_unc_permil"],marker="o",ls="",label="background")
+ax[0].errorbar(-laki_data.loc[laki_data["bcg"]==0,"depth_m"],laki_data.loc[laki_data["bcg"]==0,"d34S_permil"],laki_data.loc[laki_data["bcg"]==0,"d34S_unc_permil"],marker="o",ls="",label="volc")
+ax[0].set_xlabel("depth")
+ax[0].set_ylabel("d34S_sulfate")
+ax[0].legend()
+ax[1].plot(-laki_data["depth_m"],laki_data["depth_m"]*0+D33S_bcg,"g:",label="d34S bcg, modelled")
+ax[1].plot(-laki_modelled["depth"],laki_modelled["D33S_so4_tot"],"r-",label="d34S volc, modelled")
+ax[1].errorbar(-laki_data.loc[laki_data["bcg"]==1,"depth_m"],laki_data.loc[laki_data["bcg"]==1,'D33S_permil'],laki_data.loc[laki_data["bcg"]==1,"D33S_unc_permil"],marker="o",ls="",label="background")
+ax[1].errorbar(-laki_data.loc[laki_data["bcg"]==0,"depth_m"],laki_data.loc[laki_data["bcg"]==0,'D33S_permil'],laki_data.loc[laki_data["bcg"]==0,"D33S_unc_permil"],marker="o",ls="",label="volc")
+ax[1].set_xlabel("depth")
+ax[1].set_ylabel("D33S_sulfate")
+fig.tight_layout()
+fig.show() 
+plt.savefig("figs/model-volc_d34S_d33S.pdf") 
+plt.show()
+
+# Plot other main params
+# SO2 emission, SO2 pool, SO4 pool...
