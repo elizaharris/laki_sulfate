@@ -90,8 +90,8 @@ theta33_TMIwarm = (0.537,0.004)
 # Details of the eruption
 full_volc_length = 1.2 # Years over which the volcanic influence is evident in the ice core; length of simulation
 decay_rate = 0.001 # Decay rate for volcanic SO2: This defines how fast the SO2 is removed (see later section for details)
-so2_emission_length = 1.5*30 # days between start of eruption and emissions decreasing strongly (based roughly on Schmidt et al. www.atmos-chem-phys.net/10/6025/2010/ who state that Laki was most vigourous for 1.5 months)
-so2_emission_tail_length = 1.5*30 # days over which SO2 emissions decline linearly to 0
+so2_emission_length = 2*30 # days between start of eruption and emissions decreasing strongly (based roughly on Schmidt et al. www.atmos-chem-phys.net/10/6025/2010/ who state that Laki was most vigourous for 1.5 months, and on Fig 2 from THORDARSON AND SELF 2003)
+so2_emission_tail_length = 2*30 # days over which SO2 emissions decline linearly to 0
 total_so2 = 120 # Tg of SO2 emitted, total (will be evenly spread across the period defined above)
 mean_res_time_so2 = 20 # Mean residence time in days (mid of values in Schmidt et al)
 mean_res_time_so4 = 8 # Mean residence time in days (mid of values in Schmidt et al)
@@ -187,7 +187,7 @@ plt.show()
 
 #%% Look at oxidation pathways during the volcanic period
 
-timesteps = int(full_volc_length*365) # Daily time steps for the ~1.2 years affected
+timesteps = int(full_volc_length*365) # Daily time steps for the ~1.2 years affected (defined at the start)
 laki_modelled = pd.DataFrame(np.zeros((timesteps,15)))
 laki_modelled.columns = ["t","depth","so2_emitted","so2_pool","so2_oxidised","so4_pool","so4_removed","d34S_so2_pool","d34S_so4_pool","d33S_so4_pool","D33S_so4_pool","f_volc","d34S_so4_tot","d33S_so4_tot","D33S_so4_tot"] 
 # T is arbitrary time since eruption, according to timesteps
@@ -216,6 +216,8 @@ for n,t in enumerate(laki_modelled["t"]):
     elif t <= so2_emission_length + so2_emission_tail_length:
         proportion = 1 - (t - so2_emission_length)/so2_emission_tail_length
         laki_modelled.loc[n,"so2_emitted"] = so2_per_day*proportion
+    else:
+        laki_modelled.loc[n,"so2_emitted"] = 0
     so2_pool = so2_pool_start + laki_modelled.loc[n,"so2_emitted"]
     # Remove SO2 according to lifetime
     laki_modelled.loc[n,"so2_oxidised"] = so2_pool * (1 - np.exp(-1/mean_res_time_so2) )
@@ -265,5 +267,21 @@ fig.show()
 plt.savefig("figs/model-volc_d34S_d33S.pdf") 
 plt.show()
 
-# Plot other main params
-# SO2 emission, SO2 pool, SO4 pool...
+# Plot other model params
+fig, ax = plt.subplots(2,1,figsize=(12,6))
+ax[0].plot(-laki_modelled["depth"],laki_modelled["d34S_so4_tot"],"r-",label="d34S volc, modelled")
+ax[0].errorbar(-laki_data.loc[laki_data["bcg"]==1,"depth_m"],laki_data.loc[laki_data["bcg"]==1,"d34S_permil"],laki_data.loc[laki_data["bcg"]==1,"d34S_unc_permil"],marker="o",ls="",label="background")
+ax[0].errorbar(-laki_data.loc[laki_data["bcg"]==0,"depth_m"],laki_data.loc[laki_data["bcg"]==0,"d34S_permil"],laki_data.loc[laki_data["bcg"]==0,"d34S_unc_permil"],marker="o",ls="",label="volc")
+ax[0].set_xlabel("depth")
+ax[0].set_ylabel("d34S_sulfate")
+ax[0].legend()
+ax[1].plot(-laki_data["depth_m"],laki_data["depth_m"]*0+D33S_bcg,"g:",label="d34S bcg, modelled")
+ax[1].plot(-laki_modelled["depth"],laki_modelled["D33S_so4_tot"],"r-",label="d34S volc, modelled")
+ax[1].errorbar(-laki_data.loc[laki_data["bcg"]==1,"depth_m"],laki_data.loc[laki_data["bcg"]==1,'D33S_permil'],laki_data.loc[laki_data["bcg"]==1,"D33S_unc_permil"],marker="o",ls="",label="background")
+ax[1].errorbar(-laki_data.loc[laki_data["bcg"]==0,"depth_m"],laki_data.loc[laki_data["bcg"]==0,'D33S_permil'],laki_data.loc[laki_data["bcg"]==0,"D33S_unc_permil"],marker="o",ls="",label="volc")
+ax[1].set_xlabel("depth")
+ax[1].set_ylabel("D33S_sulfate")
+fig.tight_layout()
+fig.show() 
+plt.savefig("figs/model-volc_d34S_d33S.pdf") 
+plt.show()
