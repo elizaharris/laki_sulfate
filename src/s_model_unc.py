@@ -60,7 +60,7 @@ def rayleigh_product_33S(e,theta,d_0_34,d_0_33,f,r_std_33,r_std_34):
 
 #%% Input parameters: (mean,sd) with Gaussian distribution unless otherwise specified
 
-runname = "allTMI_30102024"
+runname = "allTMI_unc_01112024"
 
 # General conditions
 temp = 0 # 0 degC for atmospheric oxidation: Is this okay?
@@ -80,7 +80,7 @@ alpha34_OH_T = (10.60,0.73,0.004,0.015)
 alpha34_OH = get_alpha_with_temp(temp,alpha34_OH_T)
 alpha34_H2O2_T = (16.51,0.15,-0.085,0.004)
 alpha34_H2O2 = get_alpha_with_temp(temp,alpha34_H2O2_T)
-alpha34_TMI_T = (-5.039,0.044,-0.237,0.004)
+alpha34_TMI_T = (-5.039,0.44,-0.237,0.004)
 alpha34_TMI = get_alpha_with_temp(temp,alpha34_TMI_T)
 
 # 33S fractionation 
@@ -97,6 +97,7 @@ so2_emission_tail_length = 2*30 # days over which SO2 emissions decline linearly
 total_so2 = 120 # Tg of SO2 emitted, total (will be evenly spread across the period defined above)
 mean_res_time_so2 = 20 # Mean residence time in days (mid of values in Schmidt et al)
 mean_res_time_so4 = 8 # Mean residence time in days (mid of values in Schmidt et al)
+pathways_volc = [1,0,0] # Fraction of oxidation in the volcanic plume from TMIs, OH, H2O2 (doesn't need to = 1, will be normalised)
 
 # Get the Laki data
 laki_data = pd.read_csv(parentdir+'/data/laki_s_isotope_data.csv', sep=',', header=0)
@@ -183,7 +184,6 @@ ax[1].errorbar(laki_data.loc[laki_data["bcg"]==0,"depth_m"],laki_data.loc[laki_d
 ax[1].set_xlabel("depth")
 ax[1].set_ylabel("D33S_sulfate")
 fig.tight_layout()
-fig.show() 
 plt.savefig("figs/background_d34S_D33S_"+runname+".pdf") 
 plt.show()
 
@@ -201,68 +201,100 @@ laki_modelled.columns = ["t","depth","so2_emitted","so2_pool","so2_oxidised","so
 # d34S_so2_pool and so4 are the pool isotopic compositions at the END of the day
 # f_volc is the fraction of deposited sulfate from volcanic sources (for mixing to find deposited isotopic composition)
 
+# Some set up...
 laki_modelled["t"] = np.arange(0,timesteps)
 laki_start_depth = 60.18 # Roughly corresponding to the 1.2 years (if you have better data we could change these estimates I made from your figure)
 laki_end_depth = 59.5
 laki_modelled["depth"] = np.linspace(laki_start_depth,laki_end_depth,timesteps)
+so2_per_day = total_so2/(so2_emission_length + so2_emission_tail_length/2) # Max SO2 emissions (for first XX days)
 
-# Loop through the days...
-so2_per_day = total_so2/(so2_emission_length + so2_emission_tail_length/2)
-alpha34_volc = alpha34_TMI[0] # First scenario, all volc ox from TMI - Add others later!
-for n,t in enumerate(laki_modelled["t"]):
-    # Get the SO2 pool to work on
-    so2_pool_start = laki_modelled.loc[n-1,"so2_pool"] if n>0 else 0
-    # Emit SO2 if t < SO2_emission_length
-    if t <= so2_emission_length:
-        laki_modelled.loc[n,"so2_emitted"] = so2_per_day 
-    elif t <= so2_emission_length + so2_emission_tail_length:
-        proportion = 1 - (t - so2_emission_length)/so2_emission_tail_length
-        laki_modelled.loc[n,"so2_emitted"] = so2_per_day*proportion
-    else:
-        laki_modelled.loc[n,"so2_emitted"] = 0
-    so2_pool = so2_pool_start + laki_modelled.loc[n,"so2_emitted"]
-    # Remove SO2 according to lifetime
-    laki_modelled.loc[n,"so2_oxidised"] = so2_pool * (1 - np.exp(-1/mean_res_time_so2) )
-    laki_modelled.loc[n,"so2_pool"] = so2_pool - laki_modelled.loc[n,"so2_oxidised"]
-    # Get the SO4 pool
-    so4_pool_start = laki_modelled.loc[n-1,"so4_pool"] if n>0 else 0
-    so4_pool = so4_pool_start + laki_modelled.loc[n,"so2_oxidised"] # Oxidised SO2 -> SO4
-    laki_modelled.loc[n,"so4_removed"] = so4_pool * (1 - np.exp(-1/mean_res_time_so4) )
-    laki_modelled.loc[n,"so4_pool"] = so4_pool - laki_modelled.loc[n,"so4_removed"]
-    # SO2/SO4 d34S isotopic composition
-    d34S_so2_pool_start = laki_modelled.loc[n-1,"d34S_so2_pool"] if n>0 else 0
-    d34S_so2_pool = (d34S_so2_pool_start*so2_pool_start + d34S_volcSO2[0]*laki_modelled.loc[n,"so2_emitted"])/(so2_pool)
-    f_remaining = 1 - laki_modelled.loc[n,"so2_oxidised"]/so2_pool
-    laki_modelled.loc[n,"d34S_so2_pool"] = rayleigh_rem_substrate(e=alpha34_volc,d_0=d34S_so2_pool,f=f_remaining,r_std=r_34S)
-    laki_modelled.loc[n,"d34S_so4_pool"] = rayleigh_product(e=alpha34_volc,d_0=d34S_so2_pool,f=f_remaining,r_std=r_34S)
-    # D33S
-    d_0_33 = ((d34S_so2_pool/1000+1)**0.515 - 1)*1000
-    tmp = rayleigh_product_33S(e=alpha34_volc,theta=theta33_TMIcold[0],d_0_34=d34S_so2_pool,d_0_33=d_0_33,f=f_remaining,r_std_34=r_34S,r_std_33=r_33S)
-    laki_modelled.loc[n,"d33S_so4_pool"] = tmp[0]
-    laki_modelled.loc[n,"D33S_so4_pool"] = tmp[1]
+laki_its = dict() # Space for results of iterations
+n_its = 50
+for i in np.arange(n_its):
+    print(i)
+    this_laki_modelled = laki_modelled.copy()
+    alpha34_volc = pathways_volc[0]*alpha34_TMI[0] + pathways_volc[1]*alpha34_OH[0] + pathways_volc[2]*alpha34_H2O2[0] # First scenario, all volc ox from TMI - Add others later!
+    alpha34_volc_i = alpha34_volc + np.random.normal(0,1,1)*(pathways_volc[0]*alpha34_TMI[1] + pathways_volc[1]*alpha34_OH[1] + pathways_volc[2]*alpha34_H2O2[1]) # First scenario, all volc ox from TMI - Add others later!
+    # Loop through the days...
+    for n,t in enumerate(this_laki_modelled["t"]):
+        # Get the SO2 pool to work on
+        so2_pool_start = this_laki_modelled.loc[n-1,"so2_pool"] if n>0 else 0
+        # Emit SO2 if t < SO2_emission_length
+        if t <= so2_emission_length:
+            this_laki_modelled.loc[n,"so2_emitted"] = so2_per_day 
+        elif t <= so2_emission_length + so2_emission_tail_length:
+            proportion = 1 - (t - so2_emission_length)/so2_emission_tail_length
+            this_laki_modelled.loc[n,"so2_emitted"] = so2_per_day*proportion
+        else:
+            this_laki_modelled.loc[n,"so2_emitted"] = 0
+        so2_pool = so2_pool_start + this_laki_modelled.loc[n,"so2_emitted"]
+        # Remove SO2 according to lifetime
+        this_laki_modelled.loc[n,"so2_oxidised"] = so2_pool * (1 - np.exp(-1/mean_res_time_so2) )
+        this_laki_modelled.loc[n,"so2_pool"] = so2_pool - this_laki_modelled.loc[n,"so2_oxidised"]
+        # Get the SO4 pool
+        so4_pool_start = this_laki_modelled.loc[n-1,"so4_pool"] if n>0 else 0
+        so4_pool = so4_pool_start + this_laki_modelled.loc[n,"so2_oxidised"] # Oxidised SO2 -> SO4
+        this_laki_modelled.loc[n,"so4_removed"] = so4_pool * (1 - np.exp(-1/mean_res_time_so4) )
+        this_laki_modelled.loc[n,"so4_pool"] = so4_pool - this_laki_modelled.loc[n,"so4_removed"]
+        # SO2/SO4 d34S isotopic composition
+        d34S_so2_pool_start = this_laki_modelled.loc[n-1,"d34S_so2_pool"] if n>0 else 0
+        d34S_so2_pool = (d34S_so2_pool_start*so2_pool_start + d34S_volcSO2[0]*this_laki_modelled.loc[n,"so2_emitted"])/(so2_pool)
+        f_remaining = 1 - this_laki_modelled.loc[n,"so2_oxidised"]/so2_pool
+        this_laki_modelled.loc[n,"d34S_so2_pool"] = rayleigh_rem_substrate(e=alpha34_volc_i,d_0=d34S_so2_pool,f=f_remaining,r_std=r_34S)
+        this_laki_modelled.loc[n,"d34S_so4_pool"] = rayleigh_product(e=alpha34_volc_i,d_0=d34S_so2_pool,f=f_remaining,r_std=r_34S)
+        # D33S
+        d_0_33 = ((d34S_so2_pool/1000+1)**0.515 - 1)*1000
+        alpha34_TMI_i = alpha34_TMI[0] + np.random.normal(0,1,1)*alpha34_TMI[1]
+        theta33_TMIcold_i = theta33_TMIcold[0] + np.random.normal(0,1,1)*theta33_TMIcold[1]     
+        alpha34_OH_i = alpha34_OH[0] + np.random.normal(0,1,1)*alpha34_OH[1]
+        theta33_OH_i = theta33_OH[0] + np.random.normal(0,1,1)*theta33_OH[1] 
+        alpha34_H2O2_i = alpha34_H2O2[0] + np.random.normal(0,1,1)*alpha34_H2O2[1]
+        theta33_H2O2_i = theta33_H2O2[0] + np.random.normal(0,1,1)*theta33_H2O2[1] 
+        dD33_TMI = rayleigh_product_33S(e=alpha34_TMI_i,theta=theta33_TMIcold_i,d_0_34=d34S_so2_pool,d_0_33=d_0_33,f=f_remaining,r_std_34=r_34S,r_std_33=r_33S)
+        dD33_OH = rayleigh_product_33S(e=alpha34_OH_i,theta=theta33_OH_i,d_0_34=d34S_so2_pool,d_0_33=d_0_33,f=f_remaining,r_std_34=r_34S,r_std_33=r_33S)
+        dD33_H2O2 = rayleigh_product_33S(e=alpha34_H2O2_i,theta=theta33_H2O2_i,d_0_34=d34S_so2_pool,d_0_33=d_0_33,f=f_remaining,r_std_34=r_34S,r_std_33=r_33S)
+        d33S_so4 = pathways_volc[0]*dD33_TMI[0] + pathways_volc[1]*dD33_OH[0] + pathways_volc[2]*dD33_H2O2[0]
+        D33S_so4 = pathways_volc[0]*dD33_TMI[1] + pathways_volc[1]*dD33_OH[1] + pathways_volc[2]*dD33_H2O2[1]
+        this_laki_modelled.loc[n,"d33S_so4_pool"] = d33S_so4
+        this_laki_modelled.loc[n,"D33S_so4_pool"] = D33S_so4
 
-# Mix volcanic S with background S
-# Based on max 96% contribution of volcanic sulfate to total deposited sulfate 
-# (this is the max in Will's excel, maybe there is a better way to estimate?)
-laki_modelled["f_volc"] = laki_modelled["so4_removed"]/np.nanmax(laki_modelled["so4_removed"])*0.96
-laki_modelled["d34S_so4_tot"] = laki_modelled["d34S_so4_pool"]*laki_modelled["f_volc"] + d34S_bcg*(1-laki_modelled["f_volc"])
-laki_modelled["d33S_so4_tot"] = laki_modelled["d33S_so4_pool"]*laki_modelled["f_volc"] + d33S_bcg*(1-laki_modelled["f_volc"])
-laki_modelled["D33S_so4_tot"] = laki_modelled["D33S_so4_pool"]*laki_modelled["f_volc"] + D33S_bcg*(1-laki_modelled["f_volc"])
+    # Mix volcanic S with background S
+    # Based on max 96% contribution of volcanic sulfate to total deposited sulfate 
+    # (this is the max in Will's excel, maybe there is a better way to estimate?)
+    this_laki_modelled["f_volc"] = this_laki_modelled["so4_removed"]/np.nanmax(this_laki_modelled["so4_removed"])*0.96
+    this_laki_modelled["d34S_so4_tot"] = this_laki_modelled["d34S_so4_pool"]*this_laki_modelled["f_volc"] + d34S_bcg*(1-this_laki_modelled["f_volc"])
+    this_laki_modelled["d33S_so4_tot"] = this_laki_modelled["d33S_so4_pool"]*this_laki_modelled["f_volc"] + d33S_bcg*(1-this_laki_modelled["f_volc"])
+    this_laki_modelled["D33S_so4_tot"] = this_laki_modelled["D33S_so4_pool"]*this_laki_modelled["f_volc"] + D33S_bcg*(1-this_laki_modelled["f_volc"])
 
-# Save as csv
-laki_modelled.to_csv("output/"+runname+"_model_output.csv")
+    # Save as csv and to dict
+    this_laki_modelled.to_csv("output/iterations_individual/"+runname+"_"+str(i)+"_model_output.csv")
+    laki_its[str(i)] = this_laki_modelled
+    
+# Find average and stdev of all the runs
+laki_mod_mean = laki_modelled.copy()
+laki_mod_sd = laki_modelled.copy()
+for c in laki_modelled.columns:
+    tmp = np.zeros((laki_modelled.shape[0],n_its))
+    for i in np.arange(n_its):
+        tmp[:,i] = laki_its[str(i)][c]
+    laki_mod_mean[c] = np.nanmean(tmp,axis=1)
+    laki_mod_sd[c] = np.nanstd(tmp,axis=1)
 
 # Plot data and background
 fig, ax = plt.subplots(2,1,figsize=(12,6))
-ax[0].plot(-laki_data["depth_m"],laki_data["depth_m"]*0+d34S_bcg,"g:",label="d34S bcg, modelled")
-ax[0].plot(-laki_modelled["depth"],laki_modelled["d34S_so4_tot"],"r-",label="d34S volc, modelled")
+ax[0].plot(-laki_data["depth_m"],laki_data["depth_m"]*0+d34S_bcg,"g:",label="d34S bcg, modelled") # plot background
+ax[0].plot(-laki_mod_mean["depth"],laki_mod_mean["d34S_so4_tot"],"r-",label="d34S volc, modelled") # model
+ax[0].plot(-laki_mod_mean["depth"],laki_mod_mean["d34S_so4_tot"]-laki_mod_sd["d34S_so4_tot"],"r:")
+ax[0].plot(-laki_mod_mean["depth"],laki_mod_mean["d34S_so4_tot"]+laki_mod_sd["d34S_so4_tot"],"r:")
 ax[0].errorbar(-laki_data.loc[laki_data["bcg"]==1,"depth_m"],laki_data.loc[laki_data["bcg"]==1,"d34S_permil"],laki_data.loc[laki_data["bcg"]==1,"d34S_unc_permil"],marker="o",ls="",label="background")
 ax[0].errorbar(-laki_data.loc[laki_data["bcg"]==0,"depth_m"],laki_data.loc[laki_data["bcg"]==0,"d34S_permil"],laki_data.loc[laki_data["bcg"]==0,"d34S_unc_permil"],marker="o",ls="",label="volc")
 ax[0].set_xlabel("depth")
 ax[0].set_ylabel("d34S_sulfate")
 ax[0].legend()
 ax[1].plot(-laki_data["depth_m"],laki_data["depth_m"]*0+D33S_bcg,"g:",label="d34S bcg, modelled")
-ax[1].plot(-laki_modelled["depth"],laki_modelled["D33S_so4_tot"],"r-",label="d34S volc, modelled")
+ax[1].plot(-laki_mod_mean["depth"],laki_mod_mean["D33S_so4_tot"],"r-",label="d34S volc, modelled")
+ax[1].plot(-laki_mod_mean["depth"],laki_mod_mean["D33S_so4_tot"]-laki_mod_sd["D33S_so4_tot"],"r:")
+ax[1].plot(-laki_mod_mean["depth"],laki_mod_mean["D33S_so4_tot"]+laki_mod_sd["D33S_so4_tot"],"r:")
 ax[1].errorbar(-laki_data.loc[laki_data["bcg"]==1,"depth_m"],laki_data.loc[laki_data["bcg"]==1,'D33S_permil'],laki_data.loc[laki_data["bcg"]==1,"D33S_unc_permil"],marker="o",ls="",label="background")
 ax[1].errorbar(-laki_data.loc[laki_data["bcg"]==0,"depth_m"],laki_data.loc[laki_data["bcg"]==0,'D33S_permil'],laki_data.loc[laki_data["bcg"]==0,"D33S_unc_permil"],marker="o",ls="",label="volc")
 ax[1].set_xlabel("depth")
@@ -273,19 +305,31 @@ plt.show()
 
 # Plot other model params
 fig, ax = plt.subplots(4,1,figsize=(6,8))
-ax[0].plot(laki_modelled["t"],laki_modelled["so2_emitted"],label="so2_emitted")
-ax[0].plot(laki_modelled["t"],laki_modelled['so2_oxidised'],label='so2_oxidised')
+ax[0].plot(laki_mod_mean["t"],laki_mod_mean["so2_emitted"],"b-",label="so2_emitted")
+ax[0].plot(laki_mod_mean["t"],laki_mod_mean["so2_emitted"]-laki_mod_sd["so2_emitted"],"b:")
+ax[0].plot(laki_mod_mean["t"],laki_mod_mean["so2_emitted"]+laki_mod_sd["so2_emitted"],"b:")
+ax[0].plot(laki_mod_mean["t"],laki_mod_mean['so2_oxidised'],"r-",label='so2_oxidised')
+ax[0].plot(laki_mod_mean["t"],laki_mod_mean["so2_oxidised"]-laki_mod_sd["so2_oxidised"],"r:")
+ax[0].plot(laki_mod_mean["t"],laki_mod_mean["so2_oxidised"]+laki_mod_sd["so2_oxidised"],"r:")
 ax[0].set_ylabel("so2 (~megatons)")
 ax[0].legend()
-ax[1].plot(laki_modelled["t"],laki_modelled['so2_pool'],label='so2_pool')
-ax[1].plot(laki_modelled["t"],np.cumsum(laki_modelled['so2_emitted']),label='cumulative so2 emissions')
+ax[1].plot(laki_mod_mean["t"],laki_mod_mean['so2_pool'],"b-",label='so2_pool')
+ax[1].plot(laki_mod_mean["t"],laki_mod_mean["so2_pool"]-laki_mod_sd["so2_pool"],"b:")
+ax[1].plot(laki_mod_mean["t"],laki_mod_mean["so2_pool"]+laki_mod_sd["so2_pool"],"b:")
+ax[1].plot(laki_mod_mean["t"],np.cumsum(laki_mod_mean['so2_emitted']),label='cumulative so2 emissions')
 ax[1].set_ylabel("so2 (~megatons)")
 ax[1].legend()
-ax[2].plot(laki_modelled["t"],laki_modelled['so4_pool'],label='so4_pool')
-ax[2].plot(laki_modelled["t"],laki_modelled['so4_removed'],label='so4_removed')
+ax[2].plot(laki_mod_mean["t"],laki_mod_mean['so4_pool'],"b-",label='so4_pool')
+ax[2].plot(laki_mod_mean["t"],laki_mod_mean["so4_pool"]-laki_mod_sd["so4_pool"],"b:")
+ax[2].plot(laki_mod_mean["t"],laki_mod_mean["so4_pool"]+laki_mod_sd["so4_pool"],"b:")
+ax[2].plot(laki_mod_mean["t"],laki_mod_mean['so4_removed'],'r',label='so4_removed')
+ax[2].plot(laki_mod_mean["t"],laki_mod_mean["so4_removed"]-laki_mod_sd["so4_removed"],"r:")
+ax[2].plot(laki_mod_mean["t"],laki_mod_mean["so4_removed"]+laki_mod_sd["so4_removed"],"r:")
 ax[2].set_ylabel("so4 (~megatons)")
 ax[2].legend()
-ax[3].plot(laki_modelled["t"],laki_modelled['f_volc'],label='f_volc')
+ax[3].plot(laki_mod_mean["t"],laki_mod_mean['f_volc'],"b-",label='f_volc')
+ax[3].plot(laki_mod_mean["t"],laki_mod_mean["f_volc"]-laki_mod_sd["f_volc"],"b:")
+ax[3].plot(laki_mod_mean["t"],laki_mod_mean["f_volc"]+laki_mod_sd["f_volc"],"b:")
 ax[3].set_ylabel("fraction of SO4 from volc")
 ax[3].legend()
 ax[3].set_xlabel("days since eruption")
