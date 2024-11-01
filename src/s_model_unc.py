@@ -60,7 +60,7 @@ def rayleigh_product_33S(e,theta,d_0_34,d_0_33,f,r_std_33,r_std_34):
 
 #%% Input parameters: (mean,sd) with Gaussian distribution unless otherwise specified
 
-runname = "allTMI_unc_01112024"
+runname = "TMIall_unc_01112024"
 
 # General conditions
 temp = 0 # 0 degC for atmospheric oxidation: Is this okay?
@@ -97,7 +97,7 @@ so2_emission_tail_length = 2*30 # days over which SO2 emissions decline linearly
 total_so2 = 120 # Tg of SO2 emitted, total (will be evenly spread across the period defined above)
 mean_res_time_so2 = 20 # Mean residence time in days (mid of values in Schmidt et al)
 mean_res_time_so4 = 8 # Mean residence time in days (mid of values in Schmidt et al)
-pathways_volc = [1,0,0] # Fraction of oxidation in the volcanic plume from TMIs, OH, H2O2 (doesn't need to = 1, will be normalised)
+pathways_volc = [1,0.0,0.0] # Fraction of oxidation in the volcanic plume from TMIs, OH, H2O2 
 
 # Get the Laki data
 laki_data = pd.read_csv(parentdir+'/data/laki_s_isotope_data.csv', sep=',', header=0)
@@ -163,9 +163,9 @@ D33S_bcg = bcg_33S_OH[1]*f_OH + bcg_33S_H2O2[1]*f_H2O2
 # Plot data and background
 fig, ax = plt.subplots(2,1,figsize=(12,6))
 # 34S
-ax[0].plot(laki_data["depth_m"],laki_data["depth_m"]*0+d33S_bcg,"r-",label="d34S bcg, modelled")
-ax[0].plot(laki_data["depth_m"],laki_data["depth_m"]*0+d33S_bcg+frac_OH_H2O2["d_SO4_unc"].iloc[r],"r:")
-ax[0].plot(laki_data["depth_m"],laki_data["depth_m"]*0+d33S_bcg-frac_OH_H2O2["d_SO4_unc"].iloc[r],"r:")
+ax[0].plot(laki_data["depth_m"],laki_data["depth_m"]*0+d34S_bcg,"r-",label="d34S bcg, modelled")
+ax[0].plot(laki_data["depth_m"],laki_data["depth_m"]*0+d34S_bcg+frac_OH_H2O2["d_SO4_unc"].iloc[r],"r:")
+ax[0].plot(laki_data["depth_m"],laki_data["depth_m"]*0+d34S_bcg-frac_OH_H2O2["d_SO4_unc"].iloc[r],"r:")
 ax[0].plot(laki_data["depth_m"],laki_data["depth_m"]*0+bcg["d34S_permil"].iloc[0],"b-",label="d34S bcg, measured")
 ax[0].plot(laki_data["depth_m"],laki_data["depth_m"]*0+bcg["d34S_permil"].iloc[0]+bcg["d34S_unc_permil"].iloc[0],"b:")
 ax[0].plot(laki_data["depth_m"],laki_data["depth_m"]*0+bcg["d34S_permil"].iloc[0]-bcg["d34S_unc_permil"].iloc[0],"b:")
@@ -279,6 +279,8 @@ for c in laki_modelled.columns:
         tmp[:,i] = laki_its[str(i)][c]
     laki_mod_mean[c] = np.nanmean(tmp,axis=1)
     laki_mod_sd[c] = np.nanstd(tmp,axis=1)
+laki_mod_mean.to_csv("output/"+runname+"_"+str(i)+"_model_output.csv")
+laki_mod_sd.to_csv("output/"+runname+"_"+str(i)+"_model_output_sd.csv")
 
 # Plot data and background
 fig, ax = plt.subplots(2,1,figsize=(12,6))
@@ -316,7 +318,7 @@ ax[0].legend()
 ax[1].plot(laki_mod_mean["t"],laki_mod_mean['so2_pool'],"b-",label='so2_pool')
 ax[1].plot(laki_mod_mean["t"],laki_mod_mean["so2_pool"]-laki_mod_sd["so2_pool"],"b:")
 ax[1].plot(laki_mod_mean["t"],laki_mod_mean["so2_pool"]+laki_mod_sd["so2_pool"],"b:")
-ax[1].plot(laki_mod_mean["t"],np.cumsum(laki_mod_mean['so2_emitted']),label='cumulative so2 emissions')
+ax[1].plot(laki_mod_mean["t"],np.cumsum(laki_mod_mean['so2_emitted']),"r-",label='cumulative so2 emissions')
 ax[1].set_ylabel("so2 (~megatons)")
 ax[1].legend()
 ax[2].plot(laki_mod_mean["t"],laki_mod_mean['so4_pool'],"b-",label='so4_pool')
