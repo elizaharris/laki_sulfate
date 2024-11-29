@@ -60,16 +60,16 @@ def rayleigh_product_33S(e,theta,d_0_34,d_0_33,f,r_std_33,r_std_34):
 
 #%% Input parameters: (mean,sd) with Gaussian distribution unless otherwise specified
 
-runname = "TMIall_unc_01112024"
+runname = "test_28112024"
 
 # General conditions
 temp = 0 # 0 degC for atmospheric oxidation: Is this okay?
 r_34S = 1/22.7 # These are the ratios for IAEA-S-1 but this won't make any difference to the calcs; from https://www.sciencedirect.com/science/article/abs/pii/S0016703701006111
 r_33S = 1/126.9
-frac_oxidised_bcg_tot = 0.5 # Fraction of background SO2 oxidised: Is this right? Better guesses? If it's too low we can't converge with the background d34S easily
+frac_oxidised_bcg_tot = 0.9 # Fraction of background SO2 oxidised: Is this right? Better guesses? If it's too low we can't converge with the background d34S easily
 
 # Emitted SO2 isotopic composition
-d34S_bcgSO2 = (-1,1) # Currently just mirroring volc: Do we have a better value here?
+d34S_bcgSO2 = (5,1) # Much marine sulfur so higher; mixed with volcanic - still needs refinement
 d33S_bcgSO2 = (((d34S_bcgSO2[0]/1000+1)**0.515 - 1)*1000,0.01) # D33S = 0
 d34S_volcSO2 = (-1,1) # From Will, email
 d33S_volcSO2 = (((d34S_volcSO2[0]/1000+1)**0.515 - 1)*1000,0.01) # D33S = 0; is this right?
@@ -93,11 +93,11 @@ theta33_TMIwarm = (0.537,0.004)
 full_volc_length = 1.2 # Years over which the volcanic influence is evident in the ice core; length of simulation
 decay_rate = 0.001 # Decay rate for volcanic SO2: This defines how fast the SO2 is removed (see later section for details)
 so2_emission_length = 2*30 # days between start of eruption and emissions decreasing strongly (based roughly on Schmidt et al. www.atmos-chem-phys.net/10/6025/2010/ who state that Laki was most vigourous for 1.5 months, and on Fig 2 from THORDARSON AND SELF 2003)
-so2_emission_tail_length = 2*30 # days over which SO2 emissions decline linearly to 0
+so2_emission_tail_length = 3*30 # days over which SO2 emissions decline linearly to 0
 total_so2 = 120 # Tg of SO2 emitted, total (will be evenly spread across the period defined above)
 mean_res_time_so2 = 20 # Mean residence time in days (mid of values in Schmidt et al)
 mean_res_time_so4 = 8 # Mean residence time in days (mid of values in Schmidt et al)
-pathways_volc = [1,0.0,0.0] # Fraction of oxidation in the volcanic plume from TMIs, OH, H2O2 
+pathways_volc = [1,0,0] # Fraction of oxidation in the volcanic plume from TMIs, OH, H2O2 
 
 # Get the Laki data
 laki_data = pd.read_csv(parentdir+'/data/laki_s_isotope_data.csv', sep=',', header=0)
@@ -203,7 +203,7 @@ laki_modelled.columns = ["t","depth","so2_emitted","so2_pool","so2_oxidised","so
 
 # Some set up...
 laki_modelled["t"] = np.arange(0,timesteps)
-laki_start_depth = 60.18 # Roughly corresponding to the 1.2 years (if you have better data we could change these estimates I made from your figure)
+laki_start_depth = 60.25 # Roughly corresponding to the 1.2 years (if you have better data we could change these estimates I made from your figure)
 laki_end_depth = 59.5
 laki_modelled["depth"] = np.linspace(laki_start_depth,laki_end_depth,timesteps)
 so2_per_day = total_so2/(so2_emission_length + so2_emission_tail_length/2) # Max SO2 emissions (for first XX days)
