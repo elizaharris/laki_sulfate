@@ -62,7 +62,7 @@ def rayleigh_product_33S(e,theta,d_0_34,d_0_33,f,r_std_33,r_std_34):
 
 #%% Input parameters: (mean,sd) with Gaussian distribution unless otherwise specified
 
-runname = "100-TMI_0-H2O2_0-OH_outlier_rem_so2halfrestime"
+runname = "0-TMI_100-OH_0-H2O2_outlier_rem"
 #runname = "50-TMI_25-H2O2_25-OH_outlier_rem"
 #runname = "0-TMI_50-H2O2_50-OH_outlier_rem"
 
@@ -99,9 +99,9 @@ decay_rate = 0.001 # Decay rate for volcanic SO2: This defines how fast the SO2 
 so2_emission_length = 2*30 # days between start of eruption and emissions decreasing strongly (based roughly on Schmidt et al. www.atmos-chem-phys.net/10/6025/2010/ who state that Laki was most vigourous for 1.5 months, and on Fig 2 from THORDARSON AND SELF 2003)
 so2_emission_tail_length = 3*30 # days over which SO2 emissions decline linearly to 0
 total_so2 = 120 # Tg of SO2 emitted, total (will be evenly spread across the period defined above)
-mean_res_time_so2 = 10 # Mean residence time in days (mid of values in Schmidt et al)
+mean_res_time_so2 = 20 # Mean residence time in days (mid of values in Schmidt et al)
 mean_res_time_so4 = 8 # Mean residence time in days (mid of values in Schmidt et al)
-pathways_volc = [1,0,0] # Fraction of oxidation in the volcanic plume from TMIs, OH, H2O2 
+pathways_volc = [0,1,0] # Fraction of oxidation in the volcanic plume from TMIs, OH, H2O2 
 
 # Get the Laki data
 laki_data = pd.read_csv(parentdir+'/data/laki_s_isotope_data_outlier_rem.csv', sep=',', header=0)
