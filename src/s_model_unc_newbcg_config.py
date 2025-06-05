@@ -262,7 +262,7 @@ pathways_volc["H2O2"] = np.interp(laki_modelled["t"],ox_pathways["fraction_of_vo
 pathways_volc["TMI"] = np.interp(laki_modelled["t"],ox_pathways["fraction_of_volc"]*int(full_volc_length*365),ox_pathways["TMI"])
 
 laki_its = dict() # Space for results of iterations
-n_its = 50
+n_its = 100
 for i in np.arange(n_its):
     print(i)
     this_laki_modelled = laki_modelled.copy()
@@ -382,6 +382,7 @@ laki_start_depth_best = tmp[0,2] # Best start depth for matching
 laki_end_depth_best = tmp[0,3] # Best start depth for matching
 laki_modelled["depth"] = np.linspace(laki_start_depth_best,laki_end_depth_best,timesteps)
 laki_mod_mean["depth"] = laki_modelled["depth"]
+laki_mod_sd["depth"] = laki_modelled["depth"]
 
 # Save
 laki_mod_mean.to_csv("output/"+runname+"/"+runname+"_"+str(i)+"_model_output.csv")
@@ -430,6 +431,7 @@ ax[0].plot(-laki_mod_mean["depth"],laki_mod_mean["d34S_so4_tot"]+laki_mod_sd["d3
 ax[0].errorbar(-laki_data.loc[laki_data["bcg"]==1,"depth_m"],laki_data.loc[laki_data["bcg"]==1,"d34S_permil"],laki_data.loc[laki_data["bcg"]==1,"d34S_unc_permil"],marker="o",ls="",label="background")
 ax[0].errorbar(-laki_data.loc[laki_data["bcg"]==0,"depth_m"],laki_data.loc[laki_data["bcg"]==0,"d34S_permil"],laki_data.loc[laki_data["bcg"]==0,"d34S_unc_permil"],marker="o",ls="",label="volc")
 ax[0].set_xlabel("depth")
+ax[0].set_xlim([-60.45,-59.7])
 ax[0].set_ylabel("d34S_sulfate")
 ax[0].legend()
 
@@ -437,6 +439,7 @@ ax[1].plot(-laki_data["depth_m"],laki_data["depth_m"]*0,"g:") # plot 0
 ax[1].errorbar(-laki_data.loc[laki_data["bcg"]==1,"depth_m"],laki_mod_resid.loc[laki_data["bcg"]==1,"d34S_so4_tot"],laki_mod_resid.loc[laki_data["bcg"]==1,"d34S_so4_tot_sd"],marker="o",ls="",label="background")
 ax[1].errorbar(-laki_data.loc[laki_data["bcg"]==0,"depth_m"],laki_mod_resid.loc[laki_data["bcg"]==0,"d34S_so4_tot"],laki_mod_resid.loc[laki_data["bcg"]==0,"d34S_so4_tot_sd"],marker="o",ls="",label="volc; rmse="+str(np.round(rmse_d34S,3)) )
 ax[1].set_xlabel("depth")
+ax[1].set_xlim([-60.45,-59.7])
 ax[1].set_ylabel("d34S_sulfate, residual")
 ax[1].legend()
 
@@ -447,12 +450,14 @@ ax[2].plot(-laki_mod_mean["depth"],laki_mod_mean["D33S_so4_tot"]+laki_mod_sd["D3
 ax[2].errorbar(-laki_data.loc[laki_data["bcg"]==1,"depth_m"],laki_data.loc[laki_data["bcg"]==1,'D33S_permil'],laki_data.loc[laki_data["bcg"]==1,"D33S_unc_permil"],marker="o",ls="",label="background")
 ax[2].errorbar(-laki_data.loc[laki_data["bcg"]==0,"depth_m"],laki_data.loc[laki_data["bcg"]==0,'D33S_permil'],laki_data.loc[laki_data["bcg"]==0,"D33S_unc_permil"],marker="o",ls="",label="volc")
 ax[2].set_xlabel("depth")
+ax[2].set_xlim([-60.45,-59.7])
 ax[2].set_ylabel("D33S_sulfate")
 
 ax[3].plot(-laki_data["depth_m"],laki_data["depth_m"]*0,"g:") # plot 0
 ax[3].errorbar(-laki_data.loc[laki_data["bcg"]==1,"depth_m"],laki_mod_resid.loc[laki_data["bcg"]==1,"D33S_so4_tot"],laki_mod_resid.loc[laki_data["bcg"]==1,"D33S_so4_tot_sd"],marker="o",ls="",label="background")
 ax[3].errorbar(-laki_data.loc[laki_data["bcg"]==0,"depth_m"],laki_mod_resid.loc[laki_data["bcg"]==0,"D33S_so4_tot"],laki_mod_resid.loc[laki_data["bcg"]==0,"D33S_so4_tot_sd"],marker="o",ls="",label="volc; rmse="+str(np.round(rmse_D33S,3)) )
 ax[3].set_xlabel("depth")
+ax[3].set_xlim([-60.45,-59.7])
 ax[3].set_ylabel("D33S_sulfate, residual")
 ax[3].legend()
 fig.tight_layout()
