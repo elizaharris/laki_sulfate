@@ -1,0 +1,13 @@
+param,value1,value2,value3,comments
+temp,0,20,NaN,Temperature (deg C) for oxidation (determines fractionation factors); min and max (uniform distribution)
+frac_oxidised_bcg_tot,0.9,NaN,NaN,Fraction of background SO2 that is oxidised (if this is too low we can't easily converge with background isotopic composition)
+d34S_bcgSO2,5,1,NaN,mean and sd - mixes with volc - Value is with significant marine contribution - might need refinement
+d34S_volcSO2,0,1,NaN,mean and sd - volc - might need refinement
+full_volc_length,1.2,NaN,NaN,Years over which the volcanic influence is evident in the ice core; length of simulation
+decay_rate,0.001,NaN,NaN,Decay rate for volcanic SO2: This defines how fast the SO2 is removed (see code for details)
+so2_emission_length,60,NaN,NaN,Days between start of eruption and emissions decreasing strongly (based roughly on Schmidt et al. www.atmos-chem-phys.net/10/6025/2010/ who state that Laki was most vigourous for 1.5 months
+so2_emission_tail_length,90,NaN,NaN,Days over which SO2 emissions decline linearly to 0
+total_so2,120,NaN,NaN,Tg of SO2 emitted
+mean_res_time_so2,20,NaN,NaN,Mean residence time in days (mid of values in Schmidt et al)
+mean_res_time_so4,8,NaN,NaN,Mean residence time in days (mid of values in Schmidt et al)
+laki_data_file,NaN,NaN,laki_s_isotope_data_outlier_rem.csv,Data file - no spaces or special characters - must be .csv

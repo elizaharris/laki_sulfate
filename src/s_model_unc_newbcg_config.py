@@ -33,6 +33,8 @@ if (len(sys.argv)>1) & (len(sys.argv[1])>0):
 else:
     print("No run name given, exiting.")
     sys.exit()
+if 0:
+    runname = "testconfigs_WillOptimal"
     
 configfile = parentdir+'/configs/configs_'+runname+'.csv'
 if not os.path.isfile(configfile):
@@ -99,7 +101,10 @@ def rayleigh_product_33S(e,theta,d_0_34,d_0_33,f,r_std_33,r_std_34):
 configs = pd.read_csv(parentdir+'/configs/configs_'+runname+'.csv', sep=',', header=0, usecols=['param','value1','value2','value3'])
 
 # General conditions
-temp = configs[configs["param"]=="temp"]["value1"].iloc[0]
+temp_min = configs[configs["param"]=="temp"]["value1"].iloc[0]
+temp_max = configs[configs["param"]=="temp"]["value2"].iloc[0]
+if np.isnan(temp_max):
+    temp_max = temp_min # If only one T is given, T is treated as having no uncertainty
 r_34S = 1/22.7 # These are the ratios for IAEA-S-1 but this won't make any difference to the calcs; from https://www.sciencedirect.com/science/article/abs/pii/S0016703701006111
 r_33S = 1/126.9
 frac_oxidised_bcg_tot = configs[configs["param"]=="frac_oxidised_bcg_tot"]["value1"].iloc[0]
@@ -122,11 +127,12 @@ mean_res_time_so4 = configs[configs["param"]=="mean_res_time_so4"]["value1"].ilo
 # 34S fractionation (T dependent): (a,b,c,d) where alpha-1 = (a+b) - (c+d)*T, where T is in deg C
 # T dependences from Harris et al. 2013
 alpha34_OH_T = (10.60,0.73,0.004,0.015)
-alpha34_OH = get_alpha_with_temp(temp,alpha34_OH_T)
 alpha34_H2O2_T = (16.51,0.15,-0.085,0.004)
-alpha34_H2O2 = get_alpha_with_temp(temp,alpha34_H2O2_T)
 alpha34_TMI_T = (-5.039,0.44,-0.237,0.004)
-alpha34_TMI = get_alpha_with_temp(temp,alpha34_TMI_T)
+background_T = 0
+alpha34_H2O2_bcg = get_alpha_with_temp(background_T,alpha34_H2O2_T)
+alpha34_OH_bcg = get_alpha_with_temp(background_T,alpha34_OH_T)
+alpha34_TMI_bcg = get_alpha_with_temp(background_T,alpha34_TMI_T)
 
 # 33S fractionation 
 theta33_OH = (0.503,0.007)
@@ -147,7 +153,6 @@ if (np.nanmax(ox_sum)>1) | (np.nanmax(ox_sum)<1):
     ox_pathways["H2O2"] = ox_pathways["H2O2"]/ox_sum
     ox_pathways["TMI"] = ox_pathways["TMI"]/ox_sum
     
-
 #%% Solve the background scenario
 
 # Find mean bcg data
@@ -175,8 +180,8 @@ frac_OH_H2O2["f_H2O2"] = 1 - frac_OH_H2O2["f_OH"]
 for n in np.arange(frac_OH_H2O2.shape[0]):
     r_0 = (d34S_bcgSO2[0]/1000 + 1)*r_34S # R for emitted SO2
     # Use RP / R0 = (1-f^alpha)/(1-f) to find RP for total reaction
-    e_comb = frac_OH_H2O2["f_OH"].iloc[n]*alpha34_OH[0] + frac_OH_H2O2["f_H2O2"].iloc[n]*alpha34_H2O2[0]
-    e_comb_unc = ( (frac_OH_H2O2["f_OH"].iloc[n]*alpha34_OH[1])**2 + (frac_OH_H2O2["f_H2O2"].iloc[n]*alpha34_H2O2[1])**2 )**0.5
+    e_comb = frac_OH_H2O2["f_OH"].iloc[n]*alpha34_OH_bcg[0] + frac_OH_H2O2["f_H2O2"].iloc[n]*alpha34_H2O2_bcg[0]
+    e_comb_unc = ( (frac_OH_H2O2["f_OH"].iloc[n]*alpha34_OH_bcg[1])**2 + (frac_OH_H2O2["f_H2O2"].iloc[n]*alpha34_H2O2_bcg[1])**2 )**0.5
     # Comb pathway
     f = 1 - frac_oxidised_bcg_tot  # Fraction remaining 
     d_SO4 = rayleigh_product(e=e_comb,d_0=d34S_bcgSO2[0],f=f,r_std=r_34S)
@@ -197,9 +202,9 @@ d34S_bcg = frac_OH_H2O2["d_SO4"].iloc[r]
 
 # Calc 33S for optimised bcg scenario
 f = 1 - f_OH*frac_oxidised_bcg_tot
-bcg_33S_OH = rayleigh_product_33S(e=alpha34_OH[0],theta=theta33_OH[0],d_0_34=d34S_bcgSO2[0],d_0_33=d33S_bcgSO2[0],f=f,r_std_34=r_34S,r_std_33=r_33S)
+bcg_33S_OH = rayleigh_product_33S(e=alpha34_OH_bcg[0],theta=theta33_OH[0],d_0_34=d34S_bcgSO2[0],d_0_33=d33S_bcgSO2[0],f=f,r_std_34=r_34S,r_std_33=r_33S)
 f = 1 - f_H2O2*frac_oxidised_bcg_tot
-bcg_33S_H2O2 = rayleigh_product_33S(e=alpha34_H2O2[0],theta=theta33_H2O2[0],d_0_34=d34S_bcgSO2[0],d_0_33=d33S_bcgSO2[0],f=f,r_std_34=r_34S,r_std_33=r_33S)
+bcg_33S_H2O2 = rayleigh_product_33S(e=alpha34_H2O2_bcg[0],theta=theta33_H2O2[0],d_0_34=d34S_bcgSO2[0],d_0_33=d33S_bcgSO2[0],f=f,r_std_34=r_34S,r_std_33=r_33S)
 d33S_bcg = bcg_33S_OH[0]*f_OH + bcg_33S_H2O2[0]*f_H2O2
 D33S_bcg = bcg_33S_OH[1]*f_OH + bcg_33S_H2O2[1]*f_H2O2
 
@@ -234,8 +239,8 @@ plt.show()
 #%% Look at oxidation pathways during the volcanic period
 
 timesteps = int(full_volc_length*365) # Daily time steps for the ~1.2 years affected (defined at the start)
-laki_modelled = pd.DataFrame(np.zeros((timesteps,15)))
-laki_modelled.columns = ["t","depth","so2_emitted","so2_pool","so2_oxidised","so4_pool","so4_removed","d34S_so2_pool","d34S_so4_pool","d33S_so4_pool","D33S_so4_pool","f_volc","d34S_so4_tot","d33S_so4_tot","D33S_so4_tot"] 
+laki_modelled = pd.DataFrame(np.zeros((timesteps,16)))
+laki_modelled.columns = ["t","temp","depth","so2_emitted","so2_pool","so2_oxidised","so4_pool","so4_removed","d34S_so2_pool","d34S_so4_pool","d33S_so4_pool","D33S_so4_pool","f_volc","d34S_so4_tot","d33S_so4_tot","D33S_so4_tot"] 
 # T is arbitrary time since eruption, according to timesteps
 # depth is the approximate depth equivalent (mainly used for plotting)
 # so2 emitted is emissions in Tg per day
@@ -264,6 +269,12 @@ n_its = 50
 for i in np.arange(n_its):
     print(i)
     this_laki_modelled = laki_modelled.copy()
+    # Start with T uncertainty
+    temp = np.random.uniform(temp_min,temp_max)
+    alpha34_H2O2 = get_alpha_with_temp(temp,alpha34_H2O2_T)
+    alpha34_OH = get_alpha_with_temp(temp,alpha34_OH_T)
+    alpha34_TMI = get_alpha_with_temp(temp,alpha34_TMI_T)
+    this_laki_modelled["temp"] = temp
     # Set up isotopic frac uncertainty
     alpha34S_i = {'OH': alpha34_OH[0] + np.random.normal(0,1,1)*alpha34_OH[1],
                   'H2O2': alpha34_H2O2[0] + np.random.normal(0,1,1)*alpha34_H2O2[1],
