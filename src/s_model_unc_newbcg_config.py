@@ -252,9 +252,6 @@ laki_modelled.columns = ["t","temp","depth","so2_emitted","so2_pool","so2_oxidis
 
 # Some set up...
 laki_modelled["t"] = np.arange(0,timesteps)
-laki_start_depth = 60.25 # Roughly corresponding to the 1.2 years (if you have better data we could change these estimates I made from your figure)
-laki_end_depth = 59.5
-laki_modelled["depth"] = np.linspace(laki_start_depth,laki_end_depth,timesteps)
 so2_per_day = total_so2/(so2_emission_length + so2_emission_tail_length/2) # Max SO2 emissions (for first XX days)
 
 # Set up volc pathways on model timesteps
@@ -344,6 +341,49 @@ for c in laki_modelled.columns:
         tmp[:,i] = laki_its[str(i)][c]
     laki_mod_mean[c] = np.nanmean(tmp,axis=1)
     laki_mod_sd[c] = np.nanstd(tmp,axis=1)
+
+# Match depth as best as possible... (0.05 m is roughly a month)
+laki_start_depth = [ 60.10, 60.40 ] # Range for the start of the eruption
+laki_end_depth = [ 59.35, 59.65 ] # Range for the end of the eruption
+depth_steps = 0.01 # Move depth by this much per iteration
+laki_start_depth_block = np.arange(laki_start_depth[0],laki_start_depth[1]+depth_steps,depth_steps)
+laki_end_depth_block = np.arange(laki_end_depth[0],laki_end_depth[1]+depth_steps,depth_steps)
+laki_start_depth_full = np.tile(laki_start_depth_block,len(laki_end_depth_block))
+laki_end_depth_full = np.repeat(laki_end_depth_block,len(laki_start_depth_block))
+laki_depth_res = np.zeros((len(laki_end_depth_full),4))+np.nan
+for n in np.arange(0,len(laki_end_depth_full)):
+    thisdepth = np.linspace(laki_start_depth_full[n],laki_end_depth_full[n],timesteps)
+    cols = ['d34S_so4_tot', 'd33S_so4_tot','D33S_so4_tot']
+    laki_mod_interp = pd.DataFrame(np.zeros((laki_data.shape[0],len(cols)*2)))
+    laki_mod_interp.columns = cols + [ c + "_sd" for c in cols]
+    for c in cols:
+        laki_mod_interp[c] = np.interp(-laki_data["depth_m"],-thisdepth,laki_mod_mean[c])
+        laki_mod_interp[c+"_sd"] = np.interp(-laki_data["depth_m"],-thisdepth,laki_mod_sd[c])
+    laki_mod_resid = laki_mod_interp.copy()
+    laki_mod_resid['d34S_so4_tot'] = laki_mod_interp['d34S_so4_tot'] - laki_data["d34S_permil"]
+    laki_mod_resid['d34S_so4_tot_sd'] = ( laki_mod_interp['d34S_so4_tot_sd']**2 + laki_data["d34S_unc_permil"]**2 )**0.5
+    laki_mod_resid['d33S_so4_tot'] = laki_mod_interp['d33S_so4_tot'] - laki_data["d33S_permil"]
+    laki_mod_resid['d33S_so4_tot_sd'] = ( laki_mod_interp['d33S_so4_tot_sd']**2 + laki_data["d33S_unc_permil"]**2 )**0.5
+    laki_mod_resid['D33S_so4_tot'] = laki_mod_interp['D33S_so4_tot'] - laki_data["D33S_permil"]
+    laki_mod_resid['D33S_so4_tot_sd'] = ( laki_mod_interp['D33S_so4_tot_sd']**2 + laki_data["D33S_unc_permil"]**2 )**0.5
+    rmse_d34S = ( np.nansum((laki_mod_resid.loc[laki_data["bcg"]==0,"d34S_so4_tot"])**2)/(sum(laki_data["bcg"]==0)) )**0.5
+    rmse_D33S = ( np.nansum((laki_mod_resid.loc[laki_data["bcg"]==0,"D33S_so4_tot"])**2)/(sum(laki_data["bcg"]==0)) )**0.5
+    laki_depth_res[n,0] = rmse_d34S
+    laki_depth_res[n,1] = rmse_D33S
+    laki_depth_res[n,2] = laki_start_depth_full[n]
+    laki_depth_res[n,3] = laki_end_depth_full[n]
+rmse_d34S_argsort = np.argsort(laki_depth_res[:,0])
+rmse_d34S_rankings = np.array([ np.where(rmse_d34S_argsort==n)[0][0] for n in np.arange(0,len(laki_end_depth_full)) ])
+rmse_D33S_argsort = np.argsort(laki_depth_res[:,1])
+rmse_D33S_rankings = np.array([ np.where(rmse_D33S_argsort==n)[0][0] for n in np.arange(0,len(laki_end_depth_full)) ])
+overall_rankings = np.argsort(rmse_d34S_rankings+rmse_D33S_rankings)
+tmp = laki_depth_res[overall_rankings,:]
+laki_start_depth_best = tmp[0,2] # Best start depth for matching
+laki_end_depth_best = tmp[0,3] # Best start depth for matching
+laki_modelled["depth"] = np.linspace(laki_start_depth_best,laki_end_depth_best,timesteps)
+laki_mod_mean["depth"] = laki_modelled["depth"]
+
+# Save
 laki_mod_mean.to_csv("output/"+runname+"/"+runname+"_"+str(i)+"_model_output.csv")
 laki_mod_sd.to_csv("output/"+runname+"/"+runname+"_"+str(i)+"_model_output_sd.csv")
 
