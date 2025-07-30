@@ -350,6 +350,12 @@ for c in laki_modelled.columns:
         tmp[:,i] = laki_its[str(i)][c]
     laki_mod_mean[c] = np.nanmean(tmp,axis=1)
     laki_mod_sd[c] = np.nanstd(tmp,axis=1)
+    
+# Get normalised sulfate dep to compare to ice core
+laki_mod_mean['so4_norm'] = laki_mod_mean['so4_removed']/np.nanmax(laki_mod_mean['so4_removed'])
+laki_mod_sd['so4_norm'] = laki_mod_sd['so4_removed']/np.nanmax(laki_mod_mean['so4_removed'])
+laki_data['so4_norm'] = laki_data['SO4_conc_ppb']/np.nanmax(laki_data['SO4_conc_ppb'])
+laki_data['so4_norm_sd'] = laki_data['so4_norm']*0.0001 # No uncertainty for sulfate conc so assume unc v low
 
 # Match depth as best as possible... (0.05 m is roughly a month)
 laki_start_depth = [ 60.10, 60.25 ] # Range for the start of the eruption (no more than 60.25 or we are into the background!)
@@ -359,10 +365,10 @@ laki_start_depth_block = np.arange(laki_start_depth[0],laki_start_depth[1]+depth
 laki_end_depth_block = np.arange(laki_end_depth[0],laki_end_depth[1]+depth_steps,depth_steps)
 laki_start_depth_full = np.tile(laki_start_depth_block,len(laki_end_depth_block))
 laki_end_depth_full = np.repeat(laki_end_depth_block,len(laki_start_depth_block))
-laki_depth_res = np.zeros((len(laki_end_depth_full),4))+np.nan
+laki_depth_res = np.zeros((len(laki_end_depth_full),5))+np.nan
 for n in np.arange(0,len(laki_end_depth_full)):
     thisdepth = np.linspace(laki_start_depth_full[n],laki_end_depth_full[n],timesteps)
-    cols = ['d34S_so4_tot', 'd33S_so4_tot','D33S_so4_tot']
+    cols = ['d34S_so4_tot', 'd33S_so4_tot','D33S_so4_tot','so4_norm']
     laki_mod_interp = pd.DataFrame(np.zeros((laki_data.shape[0],len(cols)*2)))
     laki_mod_interp.columns = cols + [ c + "_sd" for c in cols]
     for c in cols:
@@ -371,24 +377,30 @@ for n in np.arange(0,len(laki_end_depth_full)):
     laki_mod_resid = laki_mod_interp.copy()
     laki_mod_resid['d34S_so4_tot'] = laki_mod_interp['d34S_so4_tot'] - laki_data["d34S_permil"]
     laki_mod_resid['d34S_so4_tot_sd'] = ( laki_mod_interp['d34S_so4_tot_sd']**2 + laki_data["d34S_unc_permil"]**2 )**0.5
-    laki_mod_resid['d33S_so4_tot'] = laki_mod_interp['d33S_so4_tot'] - laki_data["d33S_permil"]
-    laki_mod_resid['d33S_so4_tot_sd'] = ( laki_mod_interp['d33S_so4_tot_sd']**2 + laki_data["d33S_unc_permil"]**2 )**0.5
     laki_mod_resid['D33S_so4_tot'] = laki_mod_interp['D33S_so4_tot'] - laki_data["D33S_permil"]
     laki_mod_resid['D33S_so4_tot_sd'] = ( laki_mod_interp['D33S_so4_tot_sd']**2 + laki_data["D33S_unc_permil"]**2 )**0.5
+    laki_mod_resid['so4_norm'] = laki_mod_interp['so4_norm'] - laki_data['so4_norm']
+    laki_mod_resid['so4_norm_sd'] = ( laki_mod_interp['so4_norm_sd']**2 + laki_data['so4_norm_sd']**2 )**0.5
     rmse_d34S = ( np.nansum((laki_mod_resid.loc[laki_data["bcg"]==0,"d34S_so4_tot"])**2)/(sum(laki_data["bcg"]==0)) )**0.5
     rmse_D33S = ( np.nansum((laki_mod_resid.loc[laki_data["bcg"]==0,"D33S_so4_tot"])**2)/(sum(laki_data["bcg"]==0)) )**0.5
+    rmse_SO4 = ( np.nansum((laki_mod_resid.loc[laki_data["bcg"]==0,'so4_norm'])**2)/(sum(laki_data["bcg"]==0)) )**0.5
     laki_depth_res[n,0] = rmse_d34S
     laki_depth_res[n,1] = rmse_D33S
-    laki_depth_res[n,2] = laki_start_depth_full[n]
-    laki_depth_res[n,3] = laki_end_depth_full[n]
+    laki_depth_res[n,2] = rmse_SO4
+    laki_depth_res[n,3] = laki_start_depth_full[n]
+    laki_depth_res[n,4] = laki_end_depth_full[n]
 rmse_d34S_argsort = np.argsort(laki_depth_res[:,0])
 rmse_d34S_rankings = np.array([ np.where(rmse_d34S_argsort==n)[0][0] for n in np.arange(0,len(laki_end_depth_full)) ])
 rmse_D33S_argsort = np.argsort(laki_depth_res[:,1])
 rmse_D33S_rankings = np.array([ np.where(rmse_D33S_argsort==n)[0][0] for n in np.arange(0,len(laki_end_depth_full)) ])
-overall_rankings = np.argsort(rmse_d34S_rankings+rmse_D33S_rankings)
+rmse_SO4_argsort = np.argsort(laki_depth_res[:,2])
+rmse_SO4_rankings = np.array([ np.where(rmse_SO4_argsort==n)[0][0] for n in np.arange(0,len(laki_end_depth_full)) ])
+weights = np.array(configs[configs['param']=='weights_depthmatch'][['value1','value2','value3']].iloc[0])
+weights = [ float(v) for v in weights ] # Get the weights and make sure all are numbers (sometimes parsed as char/str)
+overall_rankings = np.argsort(rmse_d34S_rankings*weights[0]+rmse_D33S_rankings*weights[1]+rmse_SO4_rankings*weights[2])
 tmp = laki_depth_res[overall_rankings,:]
-laki_start_depth_best = tmp[0,2] # Best start depth for matching
-laki_end_depth_best = tmp[0,3] # Best start depth for matching
+laki_start_depth_best = tmp[0,3] # Best start depth for matching
+laki_end_depth_best = tmp[0,4] # Best start depth for matching
 laki_modelled["depth"] = np.linspace(laki_start_depth_best,laki_end_depth_best,timesteps)
 laki_mod_mean["depth"] = laki_modelled["depth"]
 laki_mod_sd["depth"] = laki_modelled["depth"]
@@ -431,8 +443,8 @@ if my_file.is_file():
 else:
     this_resid.to_csv("output/output_summary.csv")
 
-# Plot data and background
-fig, ax = plt.subplots(4,1,figsize=(8,8))
+# Plot isotope data and background
+fig, ax = plt.subplots(5,1,figsize=(8,8))
 ax[0].plot(-laki_data["depth_m"],laki_data["depth_m"]*0+d34S_bcg,"g:",label="d34S bcg, modelled") # plot background
 ax[0].plot(-laki_mod_mean["depth"],laki_mod_mean["d34S_so4_tot"],"r-",label="d34S volc, modelled") # model
 ax[0].plot(-laki_mod_mean["depth"],laki_mod_mean["d34S_so4_tot"]-laki_mod_sd["d34S_so4_tot"],"r:")
@@ -469,6 +481,13 @@ ax[3].set_xlabel("depth")
 ax[3].set_xlim([-60.45,-59.7])
 ax[3].set_ylabel("D33S_sulfate, residual")
 ax[3].legend()
+
+ax[4].plot(-laki_mod_mean["depth"],laki_mod_mean["so4_norm"],"r-",label="d34S volc, modelled")
+ax[4].plot(-laki_mod_mean["depth"],laki_mod_mean["so4_norm"]-laki_mod_sd["so4_norm"],"r:")
+ax[4].plot(-laki_mod_mean["depth"],laki_mod_mean["so4_norm"]+laki_mod_sd["so4_norm"],"r:")
+ax[4].errorbar(-laki_data.loc[laki_data["bcg"]==1,"depth_m"],laki_data.loc[laki_data["bcg"]==1,'so4_norm'],laki_data.loc[laki_data["bcg"]==1,"D33S_unc_permil"],marker="o",ls="",label="background")
+ax[4].errorbar(-laki_data.loc[laki_data["bcg"]==0,"depth_m"],laki_data.loc[laki_data["bcg"]==0,'so4_norm'],laki_data.loc[laki_data["bcg"]==0,"D33S_unc_permil"],marker="o",ls="",label="volc")
+
 fig.tight_layout()
 plt.savefig("figs/"+runname+"/model-volc_d34S_d33S_"+runname+".pdf") 
 plt.show()
