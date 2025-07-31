@@ -1,9 +1,6 @@
 
 # Wrapper to generate and run many different ox scenarios
 
-# TO DO: Read in the rmse summary and the ox params summary and merge
-# show distribution of rmses for each value/bin for each var, to show where min is
-
 # basic packages 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -38,7 +35,7 @@ if not os.path.isfile(configfile):
 os.remove("output/output_summary_loops.csv")
     
 #%% Start loop here
-n_iterations = 5
+n_iterations = 2000
 params = np.zeros((n_iterations,9))
 allrunnames = []
 for n in np.arange(n_iterations):
